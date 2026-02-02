@@ -1,7 +1,6 @@
-// help, I'm not sure if this is right
 plugins {
     id 'application'
-    id 'org.openjfx.javafxplugin' version '0.0.10'
+    id 'org.openjfx.javafxplugin' version '0.1.0'
 }
 
 repositories {
@@ -9,16 +8,16 @@ repositories {
 }
 
 dependencies {
-    implementation files('lib/jnativehook-2.2.2.jar')
+    implementation 'com.github.kwhat:jnativehook:2.2.2'
 }
 
 javafx {
-    version = "21.0.2" // my sdk
+    version = "21.0.2"
     modules = [ 'javafx.controls', 'javafx.fxml', 'javafx.graphics', 'javafx.media', 'javafx.web' ]
 }
 
 application {
-    mainClass = 'Main'  // my main class
+    mainClass = 'Main'
 }
 
 sourceSets {
@@ -27,11 +26,4 @@ sourceSets {
             srcDirs = ['src']
         }
     }
-}
-
-tasks.withType(JavaExec) {
-    jvmArgs = [
-        "--module-path", "lib/javafx-sdk-21.0.2/lib",
-        "--add-modules", "javafx.controls,javafx.fxml,javafx.graphics,javafx.media,javafx.web"
-    ]
 }
