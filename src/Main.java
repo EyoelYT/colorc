@@ -17,17 +17,19 @@ import com.github.kwhat.jnativehook.mouse.NativeMouseListener;
 
 // JavaFX stuff
 import javafx.application.Application;
+import javafx.application.Platform;
 import javafx.scene.Scene;
-import javafx.scene.control.Button;
 import javafx.stage.Stage;
+import javafx.geometry.Insets;
+import javafx.scene.shape.Rectangle;
 import javafx.scene.layout.VBox;
 import javafx.scene.layout.HBox;
-import javafx.geometry.Insets;
+import javafx.scene.control.Button;
 import javafx.scene.control.TextField;
-import javafx.scene.shape.Rectangle;
 
 public class Main extends Application {
 
+    private static boolean hookRegistered = false;
     private static boolean extractColor = false;
     private static boolean appJustOpened = true;
     private static boolean isHoveringOverButton = false;
@@ -133,12 +135,13 @@ public class Main extends Application {
     }
 
     public static void registerGlobalNativeHook() {
+        if (hookRegistered) return;
         // Register JnativeHook to the global screen for getting mouse coordinates
         try {
             GlobalScreen.registerNativeHook();
+            hookRegistered = true;
         } catch (NativeHookException ex) {
-            System.err.println("There was a problem registering the native hook.");
-            System.err.println(ex.getMessage());
+            System.err.println("Failed to register native hook: " + ex.getMessage());
             System.exit(1);
         }
     }
@@ -155,8 +158,10 @@ public class Main extends Application {
                 if (extractColor) {
                     // If extractColor button is true (pressed) and cursor is not over any button
                     if (!isHoveringOverButton) {
-                        printColorAtMouseLocation();
-                        System.out.println("Mouse Clicked: " + e.getClickCount());
+                        Platform.runLater(() -> {
+                            printColorAtMouseLocation();
+                            System.out.println("Mouse Clicked: " + e.getClickCount());
+                        });
                     } else {
                         System.out.println("Hovering over button. Skipped getting mouse position desktop color.");
                     }
