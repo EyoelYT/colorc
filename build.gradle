@@ -3,6 +3,8 @@ plugins {
     id 'org.openjfx.javafxplugin' version '0.1.0'
 }
 
+import org.gradle.internal.os.OperatingSystem
+
 repositories {
     mavenCentral()
 }
@@ -17,7 +19,8 @@ javafx {
 }
 
 application {
-    mainClass = 'Main'
+    // Launcher is a plain class so the packaged app can start JavaFX off the classpath.
+    mainClass = 'Launcher'
 }
 
 sourceSets {
@@ -26,4 +29,54 @@ sourceSets {
             srcDirs = ['src']
         }
     }
+}
+
+// Native packaging via the JDK's bundled `jpackage` (no third-party plugin).
+//
+//   ./gradlew jpackageImage   -> self-contained app folder (build/jpackage/ColorC[.app])
+//   ./gradlew jpackage        -> native installer for the host OS:
+//                                  macOS -> .dmg, Windows -> .msi, Linux -> .deb
+//
+def appName       = 'ColorC'
+def jpackageOut   = layout.buildDirectory.dir('jpackage')
+def installLibDir = layout.buildDirectory.dir("install/${project.name}/lib")
+
+def commonJpackageArgs = { String type ->
+    def args = [
+        '--type',       type,
+        '--name',       appName,
+        '--input',      installLibDir.get().asFile.absolutePath,
+        '--main-jar',   "${project.name}.jar".toString(),
+        '--main-class', 'Launcher',
+        '--dest',       jpackageOut.get().asFile.absolutePath,
+        '--app-version','1.0.0',
+    ]
+    // OS-specific shortcut/menu flags are only valid when building an installer.
+    def os = OperatingSystem.current()
+    if (type != 'app-image') {
+        if (os.windows) {
+            args += ['--win-menu', '--win-shortcut', '--win-dir-chooser', '--win-per-user-install']
+        } else if (!os.macOsX) {
+            args += ['--linux-shortcut']
+        }
+    }
+    return args
+}
+
+tasks.register('jpackageImage', Exec) {
+    group = 'distribution'
+    description = 'Build a self-contained app image (folder) for the current OS.'
+    dependsOn 'installDist'
+    doFirst { jpackageOut.get().asFile.deleteDir() }
+    commandLine(['jpackage'] + commonJpackageArgs('app-image'))
+}
+
+tasks.register('jpackage', Exec) {
+    group = 'distribution'
+    description = 'Build a native installer (.dmg/.msi/.deb) for the current OS.'
+    dependsOn 'installDist'
+    def installerType = OperatingSystem.current().macOsX ? 'dmg'
+                      : OperatingSystem.current().windows ? 'msi' : 'deb'
+    doFirst { jpackageOut.get().asFile.mkdirs() }
+    commandLine(['jpackage'] + commonJpackageArgs(installerType))
 }
