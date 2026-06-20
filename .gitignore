@@ -54,10 +54,6 @@ Thumbs.db
 
 # Gradles
 .gradle/
-gradlew
-gradlew.bat
-gradle-wrapper.jar
-gradle-wrapper.properties
 
 # Node?
 /node_modules/
