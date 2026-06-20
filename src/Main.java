@@ -26,12 +26,12 @@ import javafx.scene.layout.VBox;
 import javafx.scene.layout.HBox;
 import javafx.scene.control.Button;
 import javafx.scene.control.TextField;
+import javafx.scene.control.Alert;
 
 public class Main extends Application {
 
     private static boolean hookRegistered = false;
     private static boolean extractColor = false;
-    private static boolean appJustOpened = true;
     private static boolean isHoveringOverButton = false;
 
     // Public UI
@@ -84,11 +84,7 @@ public class Main extends Application {
         extractButton.setOnAction(event -> {
             extractColor = !extractColor;
             extractButton.setText(extractColor ? "Stop Extracting" : "Start Color Extract");
-            if (extractColor) {
-                startGetColorAtMouseLocation();
-            } else {
-                System.out.println("Color Extraction has been paused");
-            }
+            System.out.println(extractColor ? "Color Extraction started" : "Color Extraction has been paused");
         });
 
         extractButton.setOnMouseEntered(event -> isHoveringOverButton = true);
@@ -118,9 +114,12 @@ public class Main extends Application {
 
         printOSInfo();
 
-        if (appJustOpened) {
-            registerGlobalNativeHook();
-            appJustOpened = false;
+        // Register the global hook and its mouse listener exactly once. The
+        // listener stays installed for the app's lifetime and is gated on the
+        // extractColor flag. Toggling the button would not add duplicates this
+        // way.
+        if (registerGlobalNativeHook()) {
+            startGetColorAtMouseLocation();
         }
     }
 
@@ -134,15 +133,28 @@ public class Main extends Application {
         launch(args);
     }
 
-    public static void registerGlobalNativeHook() {
-        if (hookRegistered) return;
-        // Register JnativeHook to the global screen for getting mouse coordinates
+    // Register JNativeHook to the global screen for getting mouse coordinates.
+    // Returns true on success. On failure the app will keep running (color
+    // extraction simply won't work) instead of killing the JVM, and tells the
+    // user how to fix the most common cause: missing Accessibility access.
+    public static boolean registerGlobalNativeHook() {
+        if (hookRegistered) return true;
         try {
             GlobalScreen.registerNativeHook();
             hookRegistered = true;
+            return true;
         } catch (NativeHookException ex) {
             System.err.println("Failed to register native hook: " + ex.getMessage());
-            System.exit(1);
+            Alert alert = new Alert(Alert.AlertType.WARNING);
+            alert.setTitle("Native hook unavailable");
+            alert.setHeaderText("Color Extract can't capture global mouse clicks");
+            alert.setContentText(
+                "The OS blocked the global mouse hook, so click-to-pick is disabled.\n\n" +
+                "On macOS: System Settings > Privacy & Security > Accessibility,\n" +
+                "enable your terminal, then restart the app.\n\n" +
+                "Details: " + ex.getMessage());
+            alert.showAndWait();
+            return false;
         }
     }
 
