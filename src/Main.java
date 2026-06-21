@@ -5,6 +5,7 @@ import javafx.scene.input.ClipboardContent;
 
 // JavaFX stuff
 import javafx.application.Application;
+import javafx.application.Platform;
 import javafx.scene.Scene;
 import javafx.stage.Stage;
 import javafx.geometry.Insets;
@@ -12,7 +13,13 @@ import javafx.scene.shape.Rectangle;
 import javafx.scene.layout.VBox;
 import javafx.scene.layout.HBox;
 import javafx.scene.control.Button;
+import javafx.scene.control.CheckBox;
 import javafx.scene.control.TextField;
+import javafx.animation.PauseTransition;
+import javafx.util.Duration;
+
+// Settings persistence
+import java.util.prefs.Preferences;
 
 public class Main extends Application {
 
@@ -20,6 +27,13 @@ public class Main extends Application {
     private static TextField hexColorCodeText;
     private static TextField smolHexColorCodeText;
     private static Rectangle colorDisplay;
+
+    // Persisted Settings
+    private static final Preferences PREFS = Preferences.userNodeForPackage(Main.class);
+    private static final String HIDE_WHILE_PICKING_KEY = "hideWindowWhilePicking";
+
+    // How long to wait after hiding the window before grabbing the screen
+    private static final Duration HIDE_SETTLE_DELAY = Duration.millis(250);
 
     // Application primary stage here
     @Override
@@ -29,6 +43,12 @@ public class Main extends Application {
         final int VH_BOX_PADDINGS = 10;
 
         Button extractButton = new Button("Pick Color from Screen");
+
+        CheckBox hideWhilePicking = new CheckBox("Hide this window while picking");
+        hideWhilePicking.setSelected(PREFS.getBoolean(HIDE_WHILE_PICKING_KEY, false));
+        hideWhilePicking.selectedProperty()
+            .addListener((observable, was, isSelected) ->
+                         PREFS.putBoolean(HIDE_WHILE_PICKING_KEY, isSelected));
 
         hexColorCodeText = new TextField("#000000");
         hexColorCodeText.setPrefWidth(HORIZONTAL_SIZE);
@@ -52,6 +72,7 @@ public class Main extends Application {
         // LAYOUT
         VBox root = new VBox(VH_BOX_PADDINGS,
                              extractButton,
+                             hideWhilePicking,
                              smolHexColorDisplay,
                              hexColorDisplay,
                              colorDisplay);
@@ -66,12 +87,28 @@ public class Main extends Application {
         // cancelled (Esc) or the OS blocked screen capture.
         extractButton.setOnAction(event -> {
             extractButton.setDisable(true);
-            ScreenColorPicker.pick(color -> {
+            final boolean hide = hideWhilePicking.isSelected();
+
+            Runnable startPick = () -> ScreenColorPicker.pick(color -> {
+                if (hide) {
+                    primaryStage.show();
+                    Platform.setImplicitExit(true);
+                }
                 extractButton.setDisable(false);
                 if (color != null) {
                     applyColor(color);
                 }
             });
+
+            if (hide) {
+                Platform.setImplicitExit(false);
+                primaryStage.hide();
+                PauseTransition settle = new PauseTransition(HIDE_SETTLE_DELAY);
+                settle.setOnFinished(e -> startPick.run());
+                settle.play();
+            } else {
+                startPick.run();
+            }
         });
 
         // Button press to copy Color Text Shower text into system clipboard
