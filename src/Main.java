@@ -1,23 +1,10 @@
 
-// Mouse Pointer and Color Extraction
-import java.awt.Robot;
-import java.awt.AWTException;
-import java.awt.MouseInfo;
-import java.awt.Point;
-
 // Clipboard
 import javafx.scene.input.Clipboard;
 import javafx.scene.input.ClipboardContent;
 
-// Mouse Controls
-import com.github.kwhat.jnativehook.GlobalScreen;
-import com.github.kwhat.jnativehook.NativeHookException;
-import com.github.kwhat.jnativehook.mouse.NativeMouseEvent;
-import com.github.kwhat.jnativehook.mouse.NativeMouseListener;
-
 // JavaFX stuff
 import javafx.application.Application;
-import javafx.application.Platform;
 import javafx.scene.Scene;
 import javafx.stage.Stage;
 import javafx.geometry.Insets;
@@ -26,13 +13,8 @@ import javafx.scene.layout.VBox;
 import javafx.scene.layout.HBox;
 import javafx.scene.control.Button;
 import javafx.scene.control.TextField;
-import javafx.scene.control.Alert;
 
 public class Main extends Application {
-
-    private static boolean hookRegistered = false;
-    private static boolean extractColor = false;
-    private static boolean isHoveringOverButton = false;
 
     // Public UI
     private static TextField hexColorCodeText;
@@ -46,7 +28,7 @@ public class Main extends Application {
         final int HORIZONTAL_SIZE = 112;
         final int VH_BOX_PADDINGS = 10;
 
-        Button extractButton = new Button("Start Color Extract");
+        Button extractButton = new Button("Pick Color from Screen");
 
         hexColorCodeText = new TextField("#000000");
         hexColorCodeText.setPrefWidth(HORIZONTAL_SIZE);
@@ -80,47 +62,34 @@ public class Main extends Application {
         Scene scene = new Scene(root, 800, 600);
 
         // EVENT HANDLERS
-        // Button to initiate extraction procedure
+        // Open the full-screen overlay picker. A null result means the user
+        // cancelled (Esc) or the OS blocked screen capture.
         extractButton.setOnAction(event -> {
-            extractColor = !extractColor;
-            extractButton.setText(extractColor ? "Stop Extracting" : "Start Color Extract");
-            System.out.println(extractColor ? "Color Extraction started" : "Color Extraction has been paused");
+            extractButton.setDisable(true);
+            ScreenColorPicker.pick(color -> {
+                extractButton.setDisable(false);
+                if (color != null) {
+                    applyColor(color);
+                }
+            });
         });
-
-        extractButton.setOnMouseEntered(event -> isHoveringOverButton = true);
-        extractButton.setOnMouseExited(event -> isHoveringOverButton = false);
 
         // Button press to copy Color Text Shower text into system clipboard
-        copyHexColorCodeTextButton.setOnAction(event -> {
-            final Clipboard clipboard = Clipboard.getSystemClipboard();
-            final ClipboardContent content = new ClipboardContent();
-            content.putString(hexColorCodeText.getText());
-            clipboard.setContent(content);
-        });
-
-        copySmolHexColorCodeTextButton.setOnAction(event -> {
-            final Clipboard clipboard = Clipboard.getSystemClipboard();
-            final ClipboardContent content = new ClipboardContent();
-            content.putString(smolHexColorCodeText.getText());
-            clipboard.setContent(content);
-        });
-
-        copyHexColorCodeTextButton.setOnMouseEntered(event -> isHoveringOverButton = true);
-        copyHexColorCodeTextButton.setOnMouseExited(event -> isHoveringOverButton = false);
+        copyHexColorCodeTextButton.setOnAction(event -> copyToClipboard(hexColorCodeText.getText()));
+        copySmolHexColorCodeTextButton.setOnAction(event -> copyToClipboard(smolHexColorCodeText.getText()));
 
         primaryStage.setTitle("Color Extract");
         primaryStage.setScene(scene);
         primaryStage.show();
 
         printOSInfo();
+    }
 
-        // Register the global hook and its mouse listener exactly once. The
-        // listener stays installed for the app's lifetime and is gated on the
-        // extractColor flag. Toggling the button would not add duplicates this
-        // way.
-        if (registerGlobalNativeHook()) {
-            startGetColorAtMouseLocation();
-        }
+    private static void copyToClipboard(String text) {
+        final Clipboard clipboard = Clipboard.getSystemClipboard();
+        final ClipboardContent content = new ClipboardContent();
+        content.putString(text);
+        clipboard.setContent(content);
     }
 
     private static void printOSInfo() {
@@ -133,74 +102,16 @@ public class Main extends Application {
         launch(args);
     }
 
-    // Register JNativeHook to the global screen for getting mouse coordinates.
-    // Returns true on success. On failure the app will keep running (color
-    // extraction simply won't work) instead of killing the JVM, and tells the
-    // user how to fix the most common cause: missing Accessibility access.
-    public static boolean registerGlobalNativeHook() {
-        if (hookRegistered) return true;
-        try {
-            GlobalScreen.registerNativeHook();
-            hookRegistered = true;
-            return true;
-        } catch (NativeHookException ex) {
-            System.err.println("Failed to register native hook: " + ex.getMessage());
-            Alert alert = new Alert(Alert.AlertType.WARNING);
-            alert.setTitle("Native hook unavailable");
-            alert.setHeaderText("Color Extract can't capture global mouse clicks");
-            alert.setContentText(
-                "The OS blocked the global mouse hook, so click-to-pick is disabled.\n\n" +
-                "On macOS: System Settings > Privacy & Security > Accessibility,\n" +
-                "enable your terminal, then restart the app.\n\n" +
-                "Details: " + ex.getMessage());
-            alert.showAndWait();
-            return false;
-        }
-    }
+    // Push a picked color into the UI fields and swatch.
+    private static void applyColor(java.awt.Color color) {
+        int r = color.getRed();
+        int g = color.getGreen();
+        int b = color.getBlue();
 
-    // Start procedure where mouse clicks generate color reports
-    public static void startGetColorAtMouseLocation() {
-
-        // Add mouse click event listener
-        GlobalScreen.addNativeMouseListener(new NativeMouseListener() {
-
-            // Print color at mouse location when mouse button is pressed (unless over buttons on the desktop)
-            @Override
-            public void nativeMouseClicked(NativeMouseEvent e) {
-                if (extractColor) {
-                    // If extractColor button is true (pressed) and cursor is not over any button
-                    if (!isHoveringOverButton) {
-                        Platform.runLater(() -> {
-                            printColorAtMouseLocation();
-                            System.out.println("Mouse Clicked: " + e.getClickCount());
-                        });
-                    } else {
-                        System.out.println("Hovering over button. Skipped getting mouse position desktop color.");
-                    }
-                } else {
-                    System.out.println("Color Extraction is Paused");
-                }
-            }
-        });
-    }
-
-    // Print the color at current mouse coordinates
-    private static void printColorAtMouseLocation() {
-        Point mouseLocation = MouseInfo.getPointerInfo().getLocation();
-        int x = mouseLocation.x;
-        int y = mouseLocation.y;
-        try {
-            Robot robot = new Robot();
-            java.awt.Color color = robot.getPixelColor(x, y);
-
-            System.out.println("Color at [" + x + "," + y + "]: " + color);
-            System.out.println("HexColor = " + getHexString(color.getRed(), color.getGreen(), color.getBlue()));
-            hexColorCodeText.setText(getHexString(color.getRed(), color.getGreen(), color.getBlue()));
-            smolHexColorCodeText.setText(getRGBShortString(color.getRed(), color.getGreen(), color.getBlue()));
-            colorDisplay.setFill(convertAwtColorToJfx(color));
-        } catch (AWTException e) {
-            e.printStackTrace();
-        }
+        System.out.println("Picked color: " + getHexString(r, g, b));
+        hexColorCodeText.setText(getHexString(r, g, b));
+        smolHexColorCodeText.setText(getRGBShortString(r, g, b));
+        colorDisplay.setFill(convertAwtColorToJfx(color));
     }
 
     public static String getRGBShortString(int r, int g, int b) {
