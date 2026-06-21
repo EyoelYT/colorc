@@ -101,7 +101,7 @@ public final class ScreenColorPicker {
     /** Build one overlay window covering a single display. */
     private static Stage buildOverlay(Robot robot, java.awt.Rectangle bounds,
                                       Consumer<java.awt.Color> finish) {
-        final BufferedImage shot = robot.createScreenCapture(bounds);
+        final BufferedImage shot = captureNative(robot, bounds);
         final Image fxImage = SwingFXUtils.toFXImage(shot, null);
 
         // Captured image can be larger than the logical bounds on HiDPI displays;
@@ -204,6 +204,34 @@ public final class ScreenColorPicker {
         });
 
         return stage;
+    }
+
+    /**
+     * Capture a display at its full pixel resolution.
+     *
+     * <p>{@link Robot#createScreenCapture} downsamples to logical resolution on
+     * HiDPI displays (a 2x display captured over its logical bounds comes back at
+     * 1x), which makes the overlay look blurry once JavaFX scales it back up to
+     * the device-pixel window. Asking for the multi-resolution capture instead
+     * and taking the largest variant preserves the native pixels; the rest of the
+     * picker already accounts for an image larger than the logical bounds.
+     */
+    private static BufferedImage captureNative(Robot robot, java.awt.Rectangle bounds) {
+        java.awt.image.MultiResolutionImage mri =
+            robot.createMultiResolutionScreenCapture(bounds);
+        java.awt.Image best = null;
+        for (java.awt.Image v : mri.getResolutionVariants()) {
+            if (best == null || v.getWidth(null) > best.getWidth(null)) best = v;
+        }
+        if (best instanceof BufferedImage) return (BufferedImage) best;
+
+        // Fallback: copy into a BufferedImage if the variant isn't already one.
+        BufferedImage out = new BufferedImage(best.getWidth(null), best.getHeight(null),
+                                              BufferedImage.TYPE_INT_ARGB);
+        java.awt.Graphics2D g = out.createGraphics();
+        g.drawImage(best, 0, 0, null);
+        g.dispose();
+        return out;
     }
 
     private static int clamp(int v, int lo, int hi) {
