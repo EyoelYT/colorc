@@ -52,6 +52,20 @@ def commonJpackageArgs = { String type ->
     ]
     // OS-specific shortcut/menu flags are only valid when building an installer.
     def os = OperatingSystem.current()
+    if (os.macOsX) {
+        args += ['--mac-package-identifier', 'com.ey.colorc', '--mac-package-name', appName]
+
+        // Sign with a stable identity so the Screen Recording grant survives
+        // rebuilds. Ad-hoc signing (jpackage's default) changes the code hash
+        // every build, so macOS treats each build as a new app and re-prompts.
+        // Provide an identity to opt in, e.g.:
+        //   ./gradlew jpackage -PmacSigningId="Developer ID Application: Name (TEAMID)"
+        //   ./gradlew jpackage -PmacSigningId="ColorC Self Signed"   # a Keychain cert
+        def signingId = findProperty('macSigningId')
+        if (signingId) {
+            args += ['--mac-sign', '--mac-signing-key-user-name', signingId.toString()]
+        }
+    }
     if (type != 'app-image') {
         if (os.windows) {
             args += ['--win-menu', '--win-shortcut', '--win-dir-chooser', '--win-per-user-install']
